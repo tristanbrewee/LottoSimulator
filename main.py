@@ -1,8 +1,7 @@
-# Global functions used in classes
 import random
-import threading
 
 
+# Global functions used in classes
 def generate_random_number_single():
     """
     Generates a random int between 1 and 45.
@@ -32,7 +31,7 @@ class NationalLottery:
         """
         self.earnings = 0.0
         self.expenses = 0.0
-        self.winning_numbers = None
+        self.winning_numbers = set()
         self.prices = {1.5: 1.25,
                        2.5: 3.75,
                        3.0: 6.25,
@@ -181,159 +180,77 @@ class Player:
             self.is_fixed_player) + f" numbers; won big {self.won_big} times")
 
 
-# Thread Create Players Class
-class ThreadCreatePlayersClass(threading.Thread):
-    """
-    A custom thread to create players.
-    """
-
-    def __init__(self, amount, name, player_lis, lock):
-        """
-        Sets all attributes to their default value based on the given parameters.
-        """
-        super().__init__()
-        self.player_tuple_from_thread = ()
-        self.amount = amount
-        self.name = name
-        self.player_list = player_lis
-        self.lock = lock
-
-    def run(self):
-        """
-        Generates players and adds them to the players_list with a lock.
-        """
-        print(str(self.name) + " started")
-        if not self.amount % 2 == 0:
-            players_true = tuple(Player(True) for _ in range(self.amount // 2 + 1))
-        else:
-            players_true = tuple(Player(True) for _ in range(self.amount // 2))
-        players_false = tuple(Player(False) for _ in range(self.amount // 2))
-        self.player_tuple_from_thread += players_true + players_false
-        with self.lock:
-            self.player_list += self.player_tuple_from_thread
-        print(str(self.name) + " done")
-
-
-# Thread Play Round Class
-class ThreadPlayRoundClass(threading.Thread):
-    """
-    A custom thread to play a single round.
-    """
-
-    def __init__(self, begin_index, end_index, name, player_list, national_lottery, big_winners, lock):
-        """
-        Sets all attributes to their default value based on the given parameters.
-        """
-        super().__init__()
-        self.begin_index = begin_index
-        self.end_index = end_index
-        self.name = name
-        self.player_list = player_list
-        self.national_lottery = national_lottery
-        self.big_winners = big_winners
-        self.lock = lock
-
-    def run(self):
-        """
-        Plays a round for a given subset of the player_list.
-        """
-        print(str(self.name) + " at 0%")
-        flag_25 = False
-        flag_50 = False
-        flag_75 = False
-        point_25 = (self.end_index - self.begin_index) / 100 * 25 + self.begin_index
-        point_50 = (self.end_index - self.begin_index) / 100 * 50 + self.begin_index
-        point_75 = (self.end_index - self.begin_index) / 100 * 75 + self.begin_index
-        lottery_earnings = 0
-        lottery_expenses = 0
-        if self.end_index == -1:
-            self.end_index = len(self.player_list)
-        for i in range(self.begin_index, self.end_index):
-            lottery_earnings_expenses_big_winner = self.player_list[i].play(self.national_lottery)
-            if lottery_earnings_expenses_big_winner[2]:
-                with self.lock:
-                    self.big_winners.append(self.player_list[i])
-            lottery_earnings += lottery_earnings_expenses_big_winner[0]
-            lottery_expenses += lottery_earnings_expenses_big_winner[1]
-            if not flag_25 and i > point_25:
-                print(str(self.name) + " at 25%")
-                flag_25 = True
-            elif not flag_50 and i > point_50:
-                print(str(self.name) + " at 50%")
-                flag_50 = True
-            elif not flag_75 and i > point_75:
-                print(str(self.name) + " at 75%")
-                flag_75 = True
-        with self.lock:
-            self.national_lottery.earnings += lottery_earnings
-            self.national_lottery.expenses += lottery_expenses
-        print(str(self.name) + " done")
-
-
-# Global functions used in actual program
-def get_cpu_count():
-    """
-    Returns the amount of available cpus
-    """
-    import multiprocessing
-    return multiprocessing.cpu_count()
-
-
-def generate_players_multi_threaded(amount):
+def generate_players(amount):
     """
     Generates an amount of players and returns them as a list.
-    This function uses multithreading based on the available cpus
     """
-    cpus = get_cpu_count()
-    players_list = []
-    lock = threading.Lock()
-    if not amount % cpus == 0:
-        amount_per_thread = amount // (cpus - 1)
-        rest_amount = amount - amount_per_thread * (cpus - 1)
-        thread_tuple = tuple(ThreadCreatePlayersClass(amount_per_thread, str("playerCreate" + str(i + 1)),
-                                                         players_list, lock) for i in range(cpus - 1))
-        thread_tuple += (ThreadCreatePlayersClass(rest_amount, str("playerCreate" + str(cpus)), players_list, lock), )
+    print("Player creation started")
+    if not amount % 2 == 0:
+        players_true = [Player(True) for _ in range(amount // 2 + 1)]
     else:
-        amount_per_thread = amount // cpus
-        thread_tuple = tuple(ThreadCreatePlayersClass(amount_per_thread, str("playerCreate" + str(i + 1)),
-                                                         players_list, lock) for i in range(cpus))
-    for thread in thread_tuple:
-        thread.start()
-    for thread in thread_tuple:
-        thread.join()
-    return players_list
+        players_true = [Player(True) for _ in range(amount // 2)]
+    print("Player creation at 50%")
+    players_false = [Player(False) for _ in range(amount // 2)]
+    print("Player creation at done")
+    return players_true + players_false
 
 
-def play_rounds_multi_threaded(players_list, national_lottery, amount):
+def get_flags_and_flag_points(amount):
+    flags = [False for _ in range(10)]
+    points = [amount / 100 * (i * 10) for i in range(10)]
+    flags_and_points = [flags, points]
+    return flags_and_points
+
+
+def print_progress_according_to_current_player(current_player, flags_and_points, current_round):
+    if not flags_and_points[0][0] and current_player > flags_and_points[1][0]:
+        print(f"Round {current_round + 1} at 10%")
+        flags_and_points[0][0] = True
+    elif not flags_and_points[0][1] and current_player > flags_and_points[1][1]:
+        print(f"Round {current_round + 1} at 20%")
+        flags_and_points[0][1] = True
+    elif not flags_and_points[0][2] and current_player > flags_and_points[1][2]:
+        print(f"Round {current_round + 1} at 30%")
+        flags_and_points[0][2] = True
+    elif not flags_and_points[0][3] and current_player > flags_and_points[1][3]:
+        print(f"Round {current_round + 1} at 40%")
+        flags_and_points[0][3] = True
+    elif not flags_and_points[0][4] and current_player > flags_and_points[1][4]:
+        print(f"Round {current_round + 1} at 50%")
+        flags_and_points[0][4] = True
+    elif not flags_and_points[0][5] and current_player > flags_and_points[1][5]:
+        print(f"Round {current_round + 1} at 60%")
+        flags_and_points[0][5] = True
+    elif not flags_and_points[0][6] and current_player > flags_and_points[1][6]:
+        print(f"Round {current_round + 1} at 70%")
+        flags_and_points[0][6] = True
+    elif not flags_and_points[0][7] and current_player > flags_and_points[1][7]:
+        print(f"Round {current_round + 1} at 80%")
+        flags_and_points[0][7] = True
+    elif not flags_and_points[0][8] and current_player > flags_and_points[1][8]:
+        print(f"Round {current_round + 1} at 90%")
+        flags_and_points[0][8] = True
+
+
+def play_rounds(players_list, national_lottery, amount):
     """
     Simulates a given amount of rounds played.
-    This function uses multithreading.
-    """
-    cpus = get_cpu_count()
-    lock = threading.Lock()
-    total_players = len(players_list)
-    for round_number in range(amount):
+    # """
+    number_of_players_this_play = len(players_list)
+    flags_and_points = get_flags_and_flag_points(number_of_players_this_play)
+    for current_round in range(amount):
         national_lottery.change_numbers()
         big_winners = []
-        if not total_players % cpus == 0:
-            amount_players_per_thread = total_players // (cpus - 1)
-            rest_amount = total_players - amount_players_per_thread * (cpus - 1)
-            thread_tuple = tuple(ThreadPlayRoundClass((amount_players_per_thread * i),
-                                                     (amount_players_per_thread * i + amount_players_per_thread),
-                                                     str("PlayRound" + str(i + 1)), players_list, national_lottery,
-                                                     big_winners, lock) for i in range(cpus - 1))
-            thread_tuple += (ThreadPlayRoundClass((total_players - rest_amount), -1, str("PlayRound" + str(cpus)),
-                                                     players_list, national_lottery, big_winners, lock), )
-        else:
-            amount_players_per_thread = total_players // cpus
-            thread_tuple = tuple(ThreadPlayRoundClass((amount_players_per_thread * i),
-                                                         (amount_players_per_thread * i + amount_players_per_thread),
-                                                         str("PlayRound" + str(i + 1)), players_list, national_lottery,
-                                                         big_winners, lock) for i in range(cpus))
-        for thread in thread_tuple:
-            thread.start()
-        for thread in thread_tuple:
-            thread.join()
+        flags_and_points[0] = [False for _ in range(len(flags_and_points[0]))]
+
+        for player_index in range(number_of_players_this_play):
+            lottery_earnings_expenses_big_winner = players_list[player_index].play(national_lottery)
+            if lottery_earnings_expenses_big_winner[2]:
+                big_winners.append(players_list[player_index])
+            national_lottery.earnings += lottery_earnings_expenses_big_winner[0]
+            national_lottery.expenses += lottery_earnings_expenses_big_winner[1]
+            print_progress_according_to_current_player(player_index, flags_and_points, current_round)
+
         if len(big_winners) > 0:
             price = national_lottery.big_price / len(big_winners)
             for winner in big_winners:
@@ -343,7 +260,7 @@ def play_rounds_multi_threaded(players_list, national_lottery, amount):
             national_lottery.reset_big_price()
         else:
             national_lottery.increase_big_price()
-        print("----- Round " + str(round_number + 1) + " played! -----")
+        print(f"----- Round {current_round+1} played! -----")
 
 
 def print_statistics(players_tuple, national_lottery):
@@ -402,6 +319,6 @@ if __name__ == '__main__':
     number_of_rounds = get_user_input("How many rounds should be played?\n112 is the amount for 1 year, but the "
                                       "bigger the number, the longer it takes.\n")
     nl = NationalLottery()
-    players = tuple(generate_players_multi_threaded(number_of_players))
-    play_rounds_multi_threaded(players, nl, number_of_rounds)
+    players = tuple(generate_players(number_of_players))
+    play_rounds(players, nl, number_of_rounds)
     print_statistics(players, nl)
